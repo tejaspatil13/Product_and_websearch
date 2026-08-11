@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+requests
+tavily-python
+python-dotenv
+logging
+
+
+
+langchain
+langchain-core
+langchain-groq
+
