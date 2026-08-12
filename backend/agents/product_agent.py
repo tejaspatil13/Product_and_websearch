@@ -1,13 +1,15 @@
 import os
 import requests
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from langchain.agents import create_agent
+from pydantic import BaseModel, Field
+
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
-from typing import List
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.runnables import RunnableLambda
 
 from utils.logger import get_logger
 
@@ -24,26 +26,42 @@ PRODUCT_API = os.getenv("PRODUCT_API")
 
 
 # ============================================================
-# LLM OUTPUT SCHEMA
+# PYDANTIC OUTPUT SCHEMA
 # ============================================================
 
 class ProductOutput(BaseModel):
-    product_name: str = ""
-    manufacturer: str = ""
-    sku: str = ""
-    part_number: str = ""
-    category: str = ""
-    subcategory: str = ""
-    description: str = ""
-    price: float = 0
-    status: str = ""
-    compatibility: str = ""
-    product_image_url: str = ""
+
+    product_name: Optional[str] = None
+    manufacturer: Optional[str] = None
+    sku: Optional[str] = None
+    part_number: Optional[str] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[Any] = None
+    status: Optional[str] = None
+    compatibility: Optional[str] = None
+    product_image_url: Optional[str] = None
+
+    summary: str = ""
 
 
 class ProductSearchOutput(BaseModel):
-    message: str
-    products: List[ProductOutput]
+
+    message: str = ""
+
+    products: List[ProductOutput] = Field(
+        default_factory=list
+    )
+
+
+# ============================================================
+# PYDANTIC OUTPUT PARSER
+# ============================================================
+
+parser = PydanticOutputParser(
+    pydantic_object=ProductSearchOutput
+)
 
 
 # ============================================================
@@ -53,10 +71,13 @@ class ProductSearchOutput(BaseModel):
 @tool
 def product_search(query: str) -> list:
     """
-    Search the product API and return maximum 5 products.
+    Search the Product API and return maximum 5 products.
     """
 
-    logger.info("Product search started: %s", query)
+    logger.info(
+        "Product search started: %s",
+        query
+    )
 
     try:
 
@@ -76,24 +97,32 @@ def product_search(query: str) -> list:
 
         data = response.json()
 
-        logger.info("Product API request completed")
+        logger.info(
+            "Product API request completed"
+        )
 
         products = []
 
         # ====================================================
-        # EXTRACT PRODUCTS FROM API RESPONSE
+        # EXTRACT PRODUCTS
         # ====================================================
 
         if isinstance(data, dict):
 
-            product_data = data.get("Products", {})
+            product_data = data.get(
+                "Products",
+                {}
+            )
 
             if isinstance(product_data, dict):
 
                 for category_products in product_data.values():
 
                     if isinstance(category_products, list):
-                        products.extend(category_products)
+
+                        products.extend(
+                            category_products
+                        )
 
             elif isinstance(product_data, list):
 
@@ -104,23 +133,15 @@ def product_search(query: str) -> list:
             products = data
 
         # ====================================================
-        # LIMIT TO 5 PRODUCTS
+        # MAXIMUM 5 PRODUCTS
         # ====================================================
 
         products = products[:5]
 
         logger.info(
-            "PRODUCTS EXTRACTED: %s",
+            "Products extracted: %s",
             len(products)
         )
-
-        if not products:
-            return []
-
-        # IMPORTANT:
-        # Return Python list/dicts.
-        # Don't json.dumps().
-        # Don't create Pydantic objects here.
 
         return products
 
@@ -134,7 +155,7 @@ def product_search(query: str) -> list:
 
 
 # ============================================================
-# PRODUCT LLM
+# LLM
 # ============================================================
 
 product_model = ChatOpenAI(
@@ -144,94 +165,169 @@ product_model = ChatOpenAI(
 
 
 # ============================================================
-# STRUCTURED OUTPUT MODEL
+# PROMPT TEMPLATE
 # ============================================================
 
-structured_product_model = product_model.with_structured_output(
-    ProductSearchOutput
+product_prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """
+You are a Product Response Formatter.
+
+You will receive products directly from a Product API.
+
+Your job is to format those products into the required
+structured output.
+
+IMPORTANT RULES:
+
+1. Use ONLY information present in the API response.
+
+2. NEVER invent product information.
+
+3. NEVER invent specifications.
+
+4. NEVER invent prices.
+
+5. NEVER invent compatibility.
+
+6. NEVER add information from your own knowledge.
+
+7. Maximum 5 products can be returned.
+
+8. For each product, include ONLY fields for which
+   information is actually available in the API response.
+
+9. Do NOT create empty fields for information that is
+   not available.
+
+10. Create one "summary" for each product.
+
+11. The summary must be based ONLY on the available
+    information for that product.
+
+12. Do not use web search.
+
+13. If no products are provided, return an empty products list.
+
+14. Return the result according to the Pydantic schema.
+
+{format_instructions}
+"""
+        ),
+
+        (
+            "human",
+            """
+User query:
+
+{query}
+
+Products returned by the Product API:
+
+{products}
+"""
+        )
+    ]
 )
 
 
 # ============================================================
-# PRODUCT FORMATTER
+# CHAIN
 # ============================================================
-product_prompt = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        """
-You are a Product Response Formatter.
 
-You will receive products returned directly from the Product API.
+product_chain = (
+    product_prompt
+    | product_model
+    | parser
+)
 
-Use ONLY the information provided.
 
-Rules:
-- Never invent product information.
-- Never invent specifications.
-- Never invent prices.
-- Never invent compatibility.
-- If a field is missing, return an empty value.
-- Maximum 5 products will be provided.
-- Do not use web search.
+# ============================================================
+# PRODUCT RUNNER
+# ============================================================
 
-For each product extract:
+def run_product_search(query: str) -> dict:
+    """
+    Receives the user's product query.
 
-- Product Name
-- Manufacturer
-- SKU
-- Part Number
-- Category
-- Subcategory
-- Description
-- Price
-- Status
-- Compatibility
-- Product Image URL
+    Flow:
 
-For description, combine the available short and detailed
-description fields when appropriate.
+    query
+       ↓
+    product_search tool
+       ↓
+    Product API
+       ↓
+    maximum 5 products
+       ↓
+    PromptTemplate
+       ↓
+    LLM
+       ↓
+    PydanticOutputParser
+       ↓
+    dictionary
+    """
 
-Return the result using the provided structured schema.
-"""
-    ),
-    (
-        "human",
-        "Products returned by the Product API:\n\n{products}"
+    logger.info(
+        "Running product search for query: %s",
+        query
     )
-])
 
-# ============================================================
-# PRODUCT CHAIN
-# ============================================================
+    # ========================================================
+    # CALL PRODUCT TOOL
+    # ========================================================
 
-product_chain = product_prompt | structured_product_model
+    products = product_search.invoke(
+        query
+    )
+
+    # Safety limit
+    products = products[:5]
+
+    logger.info(
+        "Sending %s products to LLM",
+        len(products)
+    )
+
+    # ========================================================
+    # NO PRODUCTS
+    # ========================================================
+
+    if not products:
+
+        return {
+            "message": "I couldn't find any products matching your request.",
+            "products": []
+        }
+
+    # ========================================================
+    # RUN CHAIN
+    # ========================================================
+
+    result = product_chain.invoke(
+        {
+            "query": query,
+            "products": products,
+            "format_instructions": parser.get_format_instructions()
+        }
+    )
+
+    # ========================================================
+    # PYDANTIC → DICTIONARY
+    # ========================================================
+
+    return result.model_dump(
+        exclude_none=True
+    )
 
 
 # ============================================================
 # PRODUCT AGENT
 # ============================================================
 
-product_agent = create_agent(
-    model=product_model,
-    tools=[product_search],
-    system_prompt="""
-You are a Product Search Agent.
-
-For every product-related query:
-
-1. ALWAYS call product_search.
-2. Do not answer product questions from your own knowledge.
-3. Use only information returned by product_search.
-4. Never invent product information.
-5. Do not use web search.
-
-The product_search tool returns a maximum of 5 products.
-
-After receiving the products, use the product information to
-produce the final product response.
-
-If no products are returned, say:
-
-"I couldn't find any products matching your request."
-"""
+product_agent = RunnableLambda(
+    run_product_search
 )

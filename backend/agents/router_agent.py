@@ -9,29 +9,24 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-
 @tool
-def run_product_agent(query: str) -> str:
+def run_product_agent(query: str) -> dict:
     """
     Use this tool when the user is asking about products,
     manufacturers, categories, or product information.
     """
 
-    logger.info("Router selected PRODUCT agent")
-
-    response = product_agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": query
-                }
-            ]
-        }
+    logger.info(
+        "Router selected PRODUCT agent: %s",
+        query
     )
 
-    return response["messages"][-1].content
+    # IMPORTANT:
+    # product_agent is a RunnableLambda.
+    # It expects the query directly.
+    response = product_agent.invoke(query)
 
+    return response
 
 @tool
 def run_web_agent(query: str) -> str:
