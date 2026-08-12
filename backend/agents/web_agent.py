@@ -3,11 +3,11 @@ from dotenv import load_dotenv
 from tavily import TavilyClient
 from langchain.agents import create_agent
 from langchain.tools import tool
-
+from langchain_openai import ChatOpenAI
 from utils.logger import get_logger
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = get_logger(__name__)
 
@@ -45,12 +45,33 @@ def web_search(query: str) -> str:
         return "Web search is currently unavailable."
 
 
-tools = [
-    web_search
-]
+
+
+web_model = ChatOpenAI(
+    model="gpt-4.1-mini",
+    temperature=0
+)
 
 
 web_agent = create_agent(
-    model="groq:llama-3.3-70b-versatile",
-    tools=tools
+    model=web_model,
+    tools=[web_search],
+    system_prompt="""
+You are a Web Search Agent.
+
+Your job is to answer general and current questions
+using information from the internet.
+
+IMPORTANT RULES:
+
+1. Use web_search when the question requires internet information.
+
+2. Use ONLY information from the search results.
+
+3. Do not invent information.
+
+4. Give a clear and concise answer.
+
+5. Do not answer product-search questions.
+"""
 )

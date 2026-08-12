@@ -1,6 +1,6 @@
 from langchain.agents import create_agent
 from langchain.tools import tool
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 
 from agents.product_agent import product_agent
 from agents.web_agent import web_agent
@@ -56,11 +56,10 @@ def run_web_agent(query: str) -> str:
     return response["messages"][-1].content
 
 
-router_model = ChatGroq(
-    model="openai/gpt-oss-120b",
+router_model = ChatOpenAI(
+    model="gpt-4.1-mini",
     temperature=0
 )
-
 
 router_agent = create_agent(
     model=router_model,
@@ -116,6 +115,8 @@ IMPORTANT:
 
 - Select only ONE agent for a normal user query.
 - Do not call both agents unnecessarily.
+- For normal queries, call exactly ONE agent.
+- Never call both agents for the same query.
 - Do not answer product questions yourself.
 - Do not answer web-search questions yourself when web information
   is required.

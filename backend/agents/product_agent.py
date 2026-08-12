@@ -1,26 +1,59 @@
 import os
-import json
 import requests
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.tools import tool
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field
+from typing import List
 
 from utils.logger import get_logger
 
 
-load_dotenv()
+# ============================================================
+# CONFIG
+# ============================================================
+
+load_dotenv(override=True)
 
 logger = get_logger(__name__)
 
 PRODUCT_API = os.getenv("PRODUCT_API")
 
 
+# ============================================================
+# LLM OUTPUT SCHEMA
+# ============================================================
+
+class ProductOutput(BaseModel):
+    product_name: str = ""
+    manufacturer: str = ""
+    sku: str = ""
+    part_number: str = ""
+    category: str = ""
+    subcategory: str = ""
+    description: str = ""
+    price: float = 0
+    status: str = ""
+    compatibility: str = ""
+    product_image_url: str = ""
+
+
+class ProductSearchOutput(BaseModel):
+    message: str
+    products: List[ProductOutput]
+
+
+# ============================================================
+# PRODUCT SEARCH TOOL
+# ============================================================
+
 @tool
-def product_search(query: str) -> str:
+def product_search(query: str) -> list:
     """
-    Search the provided product API for products.
+    Search the product API and return maximum 5 products.
     """
 
     logger.info("Product search started: %s", query)
@@ -43,173 +76,162 @@ def product_search(query: str) -> str:
 
         data = response.json()
 
-        logger.info("Product search completed")
+        logger.info("Product API request completed")
 
-        # -----------------------------------------
-        # DEBUG: See actual API response structure
-        # -----------------------------------------
+        products = []
 
-        logger.info(
-            "Product API response type: %s",
-            type(data).__name__
-        )
+        # ====================================================
+        # EXTRACT PRODUCTS FROM API RESPONSE
+        # ====================================================
 
-        # -----------------------------------------
-        # Limit response size
-        # -----------------------------------------
+        if isinstance(data, dict):
 
-        if isinstance(data, list):
+            product_data = data.get("Products", {})
 
-            limited_data = data[:5]
+            if isinstance(product_data, dict):
 
-        elif isinstance(data, dict):
+                for category_products in product_data.values():
 
-            limited_data = {}
+                    if isinstance(category_products, list):
+                        products.extend(category_products)
 
-            # Keep only first 5 items for any list
-            # found inside the response.
+            elif isinstance(product_data, list):
 
-            for key, value in data.items():
+                products = product_data
 
-                if isinstance(value, list):
+        elif isinstance(data, list):
 
-                    limited_data[key] = value[:5]
+            products = data
 
-                else:
+        # ====================================================
+        # LIMIT TO 5 PRODUCTS
+        # ====================================================
 
-                    limited_data[key] = value
-
-        else:
-
-            limited_data = data
-
-        # -----------------------------------------
-        # Convert to JSON
-        # -----------------------------------------
-
-        result = json.dumps(
-            limited_data,
-            ensure_ascii=False,
-            default=str
-        )
-
-        # -----------------------------------------
-        # Final character safety limit
-        # -----------------------------------------
-
-        MAX_CHARS = 8000
-
-        if len(result) > MAX_CHARS:
-
-            logger.warning(
-                "Product response is large: %s characters. "
-                "Truncating to %s characters.",
-                len(result),
-                MAX_CHARS
-            )
-
-            result = result[:MAX_CHARS]
+        products = products[:5]
 
         logger.info(
-            "Product result sent to LLM: %s characters",
-            len(result)
+            "PRODUCTS EXTRACTED: %s",
+            len(products)
         )
 
-        return result
+        if not products:
+            return []
 
-    except requests.exceptions.RequestException as e:
+        # IMPORTANT:
+        # Return Python list/dicts.
+        # Don't json.dumps().
+        # Don't create Pydantic objects here.
+
+        return products
+
+    except Exception:
 
         logger.exception(
-            "Product API request failed: %s",
-            e
+            "Product search failed"
         )
 
-        return "Product search is currently unavailable."
-
-    except Exception as e:
-
-        logger.exception(
-            "Unexpected product search error: %s",
-            e
-        )
-
-        return "An error occurred while searching for products."
+        return []
 
 
-# -----------------------------------------
-# Product LLM
-# -----------------------------------------
+# ============================================================
+# PRODUCT LLM
+# ============================================================
 
-product_model = ChatGroq(
-    model="openai/gpt-oss-120b",
+product_model = ChatOpenAI(
+    model="gpt-4o-mini",
     temperature=0
 )
 
 
-# -----------------------------------------
-# Product Agent
-# -----------------------------------------
+# ============================================================
+# STRUCTURED OUTPUT MODEL
+# ============================================================
+
+structured_product_model = product_model.with_structured_output(
+    ProductSearchOutput
+)
+
+
+# ============================================================
+# PRODUCT FORMATTER
+# ============================================================
+product_prompt = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        """
+You are a Product Response Formatter.
+
+You will receive products returned directly from the Product API.
+
+Use ONLY the information provided.
+
+Rules:
+- Never invent product information.
+- Never invent specifications.
+- Never invent prices.
+- Never invent compatibility.
+- If a field is missing, return an empty value.
+- Maximum 5 products will be provided.
+- Do not use web search.
+
+For each product extract:
+
+- Product Name
+- Manufacturer
+- SKU
+- Part Number
+- Category
+- Subcategory
+- Description
+- Price
+- Status
+- Compatibility
+- Product Image URL
+
+For description, combine the available short and detailed
+description fields when appropriate.
+
+Return the result using the provided structured schema.
+"""
+    ),
+    (
+        "human",
+        "Products returned by the Product API:\n\n{products}"
+    )
+])
+
+# ============================================================
+# PRODUCT CHAIN
+# ============================================================
+
+product_chain = product_prompt | structured_product_model
+
+
+# ============================================================
+# PRODUCT AGENT
+# ============================================================
 
 product_agent = create_agent(
-
     model=product_model,
-
-    tools=[
-        product_search
-    ],
-
+    tools=[product_search],
     system_prompt="""
-You are the Product Search Agent.
+You are a Product Search Agent.
 
-Your job is to search the provided product database.
+For every product-related query:
 
-You MUST use product_search for product-related
-questions.
+1. ALWAYS call product_search.
+2. Do not answer product questions from your own knowledge.
+3. Use only information returned by product_search.
+4. Never invent product information.
+5. Do not use web search.
 
-You must ONLY use information returned by the
-product_search tool.
+The product_search tool returns a maximum of 5 products.
 
-Never invent:
+After receiving the products, use the product information to
+produce the final product response.
 
-- Product names
-- Prices
-- Manufacturers
-- SKUs
-- Specifications
-- URLs
+If no products are returned, say:
 
-If products are found:
-
-Give the user a clean and concise response.
-
-Show useful information such as:
-
-- Product name
-- Manufacturer
-- Category
-- Price
-- SKU
-- Description
-- Product URL
-
-Only show fields that are actually present
-in the search results.
-
-If no products are found:
-
-Say:
-
-"I couldn't find any products matching your request.
-Try searching with a different product name,
-manufacturer, category, or keyword."
-
-Do not expose raw API responses.
-
-Do not expose technical errors.
-
-Do not call any web search.
-
-The product_search tool is the only source
-for product information.
+"I couldn't find any products matching your request."
 """
 )
