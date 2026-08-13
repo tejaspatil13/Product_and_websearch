@@ -1,128 +1,125 @@
-from langchain.agents import create_agent
-from langchain.tools import tool
+from typing import Literal
+from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
-
-from agents.product_agent import product_agent
-from agents.web_agent import web_agent
 from utils.logger import get_logger
+from dotenv import load_dotenv
 
+# LOGGER
 
+load_dotenv(override=True)
 logger = get_logger(__name__)
 
-@tool
-def run_product_agent(query: str) -> dict:
-    """
-    Use this tool when the user is asking about products,
-    manufacturers, categories, or product information.
-    """
 
-    logger.info(
-        "Router selected PRODUCT agent: %s",
-        query
-    )
-
-    # IMPORTANT:
-    # product_agent is a RunnableLambda.
-    # It expects the query directly.
-    response = product_agent.invoke(query)
-
-    return response
-
-@tool
-def run_web_agent(query: str) -> str:
-    """
-    Use this tool when the user is asking a general question
-    or needs information from the internet.
-    """
-
-    logger.info("Router selected WEB agent")
-
-    response = web_agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": query
-                }
-            ]
-        }
-    )
-
-    return response["messages"][-1].content
+# ROUTER SCHEMA
+class RouteDecision(BaseModel):
+    route: Literal["product", "web", "general"]
+    reason: str
 
 
+# ROUTER MODEL
 router_model = ChatOpenAI(
     model="gpt-4.1-mini",
     temperature=0
 )
 
-router_agent = create_agent(
-    model=router_model,
-    tools=[
-        run_product_agent,
-        run_web_agent
-    ],
-    system_prompt="""
-You are the main routing AI for an AI Search Assistant.
 
-You have two available tools:
-
-1. run_product_agent
-2. run_web_agent
-
-Your job is to decide which agent should handle
-the user's question.
-
-PRODUCT queries:
-- Finding products
-- Product manufacturers
-- Product categories
-- Product specifications
-- Product searches
-
-Examples:
-
-"Show me Pelco cameras"
-"Find I-PRO cameras"
-"Show me Potter fire alarm products"
-"Find Avigilon products"
-
-For these, use run_product_agent.
-
-GENERAL WEB queries:
-- General knowledge
-- Current information
-- News
-- Latest developments
-- Technology information
-- Questions requiring internet information
-
-Examples:
-
-"What is machine learning?"
-"What are the latest AI developments?"
-"What is LangChain?"
-"What are the latest cybersecurity trends?"
-
-For these, use run_web_agent.
-
-IMPORTANT:
-
-- Select only ONE agent for a normal user query.
-- Do not call both agents unnecessarily.
-- For normal queries, call exactly ONE agent.
-- Never call both agents for the same query.
-- Do not answer product questions yourself.
-- Do not answer web-search questions yourself when web information
-  is required.
-- Let the selected agent produce the answer.
-- Return the selected agent's answer to the user.
-
-For simple conversation such as:
-"Hello"
-"Hi"
-"Thank you"
-
-you may respond naturally without using either search agent.
-"""
+# STRUCTURED ROUTER
+router_llm = router_model.with_structured_output(
+    RouteDecision
 )
+
+
+# ROUTER PROMPT
+ROUTER_PROMPT = """
+You are the Router Agent for an AI Search Assistant.
+
+Your ONLY responsibility is to identify which specialized
+agent should handle the user's request.
+
+Available routes:
+
+1. PRODUCT
+
+Use "product" when the user is asking about products
+available through the Product API.
+
+Examples:
+
+- Show me Pelco cameras
+- Find I-PRO cameras
+- Show me Potter fire alarm products
+- Find Avigilon products
+- Show me CCTV cameras
+- Find access control products
+- Show me security products
+- Find cameras
+- Show me fire alarm products
+- Find access control devices
+
+2. WEB
+
+Use "web" when the user needs general information,
+current information, news, technology information,
+or information that requires internet search.
+
+Examples:
+
+- What is machine learning?
+- What is LangChain?
+- What are the latest AI developments?
+- What are the latest cybersecurity trends?
+- Who is the CEO of OpenAI?
+- What happened in AI today?
+
+3. GENERAL
+
+Use "general" for simple conversation.
+
+Examples:
+
+- Hello
+- Hi
+- Thank you
+- Goodbye
+- Good morning
+
+IMPORTANT RULES:
+
+- Do NOT answer the user's question.
+- Do NOT search for products.
+- Do NOT search the web.
+- Do NOT use tools.
+- Only determine the correct route.
+- Return exactly one route:
+  product, web, or general.
+"""
+
+
+# ROUTER FUNCTION
+def route_query(query: str) -> str:
+
+    logger.info(
+        "[ROUTER] Query received | query=%s",
+        query
+    )
+
+    decision = router_llm.invoke(
+        [
+            {
+                "role": "system",
+                "content": ROUTER_PROMPT
+            },
+            {
+                "role": "user",
+                "content": query
+            }
+        ]
+    )
+
+    logger.info(
+        "[ROUTER] Decision | route=%s | reason=%s",
+        decision.route,
+        decision.reason
+    )
+
+    return decision.route

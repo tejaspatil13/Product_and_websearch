@@ -1,103 +1,94 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
-from agents.router_agent import router_agent
+from agents.router_agent import route_query
+from agents.product_agent import run_product_agent
+from agents.web_agent import run_web_agent
+from agents.general_agent import run_general_agent
+
 from utils.logger import get_logger
 
 
-app = FastAPI()
+# ============================================================
+# CONFIG
+# ============================================================
 
 logger = get_logger(__name__)
 
+app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+
+    allow_origins=[
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:8000",
+    ],
+
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# REQUEST SCHEMA
 class ChatRequest(BaseModel):
-    question: str
+    query: str
 
 
-@app.get("/Health")
-def home():
-
-    logger.info("Home endpoint called")
-
-    return {
-        "message": "AI Search Assistant is running"
-    }
-
-
+# CHAT ENDPOINT
 @app.post("/chat")
 def chat(request: ChatRequest):
 
+    query = request.query.strip()
+
     logger.info(
-        "Chat request received: %s",
-        request.question
+        "[MAIN] Query received | query=%s",
+        query
     )
 
-    try:
 
-        response = router_agent.invoke(
-            {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": request.question
-                    }
-                ]
-            }
-        )
+    # ROUTER
+    route = route_query(query)
+
+    logger.info(
+        "[MAIN] Router selected | route=%s",
+        route
+    )
+
+    
+    # PRODUCT AGENT
+    if route == "product":             
 
         logger.info(
-            "Router agent completed successfully"
+            "[MAIN] Calling Product Agent"
         )
 
-        messages = response.get(
-            "messages",
-            []
+        return run_product_agent(query)
+
+
+
+
+    # WEB AGENT
+    if route == "web":
+
+        logger.info(
+            "[MAIN] Calling Web Agent"
         )
+        return run_web_agent(query)
 
-        # ====================================================
-        # FIND PRODUCT TOOL RESULT
-        # ====================================================
 
-        for message in messages:
 
-            if getattr(message, "name", None) == "run_product_agent":
 
-                product_result = message.content
 
-                logger.info(
-                    "Product result found"
-                )
+    if route == "general":
 
-                return {
-                    "question": request.question,
-                    "result": product_result
-                }
-
-        # ====================================================
-        # FALLBACK FOR WEB AGENT
-        # ====================================================
-
-        if messages:
-
-            final_message = messages[-1].content
-
-            return {
-                "question": request.question,
-                "answer": final_message
-            }
-
+        logger.info(
+        "[MAIN] Calling General Agent"
+        )
         return {
-            "question": request.question,
-            "answer": "No response generated."
-        }
-
-    except Exception as e:
-
-        logger.exception(
-            "Error while processing chat request"
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+        "answer": run_general_agent(query),
+        "products": []
+    }
+    

@@ -1,15 +1,12 @@
 import os
 import requests
-from typing import Any, Dict, List, Optional
+
+from typing import Any, Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from langchain.tools import tool
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.runnables import RunnableLambda
 
 from utils.logger import get_logger
 
@@ -26,42 +23,66 @@ PRODUCT_API = os.getenv("PRODUCT_API")
 
 
 # ============================================================
-# PYDANTIC OUTPUT SCHEMA
+# PRODUCT SCHEMAS
 # ============================================================
 
-class ProductOutput(BaseModel):
-
-    product_name: Optional[str] = None
-    manufacturer: Optional[str] = None
+class Product(BaseModel):
+    id: str
+    name: str
     sku: Optional[str] = None
-    part_number: Optional[str] = None
-    category: Optional[str] = None
-    subcategory: Optional[str] = None
+    manufacturer: Optional[str] = None
     description: Optional[str] = None
-    price: Optional[Any] = None
-    status: Optional[str] = None
-    compatibility: Optional[str] = None
-    product_image_url: Optional[str] = None
-
-    summary: str = ""
+    image_url: Optional[str] = None
 
 
-class ProductSearchOutput(BaseModel):
-
-    message: str = ""
-
-    products: List[ProductOutput] = Field(
-        default_factory=list
-    )
+class ProductResponse(BaseModel):
+    answer: str
+    products: list[Product]
 
 
 # ============================================================
-# PYDANTIC OUTPUT PARSER
+# PRODUCT EXTRACTION
 # ============================================================
 
-parser = PydanticOutputParser(
-    pydantic_object=ProductSearchOutput
-)
+def extract_products(obj: Any) -> list[dict]:
+    """
+    Recursively find product objects inside the Product API
+    response.
+    """
+
+    products = []
+
+    # --------------------------------------------------------
+    # DICTIONARY
+    # --------------------------------------------------------
+
+    if isinstance(obj, dict):
+
+        if (
+            "ProductID" in obj
+            and "ProductName" in obj
+        ):
+            products.append(obj)
+
+        for value in obj.values():
+
+            products.extend(
+                extract_products(value)
+            )
+
+    # --------------------------------------------------------
+    # LIST
+    # --------------------------------------------------------
+
+    elif isinstance(obj, list):
+
+        for item in obj:
+
+            products.extend(
+                extract_products(item)
+            )
+
+    return products
 
 
 # ============================================================
@@ -69,17 +90,47 @@ parser = PydanticOutputParser(
 # ============================================================
 
 @tool
-def product_search(query: str) -> list:
+def product_search(query: str) -> list[dict]:
     """
-    Search the Product API and return maximum 5 products.
+    Search the Product API and return the top 5 products.
+
+    Use this tool for:
+
+    - Product searches
+    - Manufacturers
+    - Categories
+    - CCTV products
+    - Security cameras
+    - Fire alarm products
+    - Access control products
     """
 
     logger.info(
-        "Product search started: %s",
+        "[PRODUCT_TOOL] Search started | query=%s",
         query
     )
 
+    # ========================================================
+    # API CONFIGURATION
+    # ========================================================
+
+    if not PRODUCT_API:
+
+        logger.error(
+            "[PRODUCT_TOOL] PRODUCT_API is not configured"
+        )
+
+        return []
+
     try:
+
+        # ====================================================
+        # API REQUEST
+        # ====================================================
+
+        logger.info(
+            "[PRODUCT_API] Request started"
+        )
 
         response = requests.post(
             f"{PRODUCT_API}/search",
@@ -95,239 +146,300 @@ def product_search(query: str) -> list:
 
         response.raise_for_status()
 
-        data = response.json()
-
         logger.info(
-            "Product API request completed"
+            "[PRODUCT_API] Response received | status=%s",
+            response.status_code
         )
 
-        products = []
+        # ====================================================
+        # PARSE JSON
+        # ====================================================
+
+        data = response.json()
 
         # ====================================================
         # EXTRACT PRODUCTS
         # ====================================================
 
-        if isinstance(data, dict):
+        products = extract_products(data)
 
-            product_data = data.get(
-                "Products",
-                {}
-            )
-
-            if isinstance(product_data, dict):
-
-                for category_products in product_data.values():
-
-                    if isinstance(category_products, list):
-
-                        products.extend(
-                            category_products
-                        )
-
-            elif isinstance(product_data, list):
-
-                products = product_data
-
-        elif isinstance(data, list):
-
-            products = data
+        logger.info(
+            "[PRODUCT_TOOL] Raw products extracted | count=%s",
+            len(products)
+        )
 
         # ====================================================
-        # MAXIMUM 5 PRODUCTS
+        # TOP 5
         # ====================================================
 
         products = products[:5]
 
         logger.info(
-            "Products extracted: %s",
+            "[PRODUCT_TOOL] Top-K applied | k=5 | count=%s",
             len(products)
         )
 
-        return products
+        # ====================================================
+        # COMPACT PRODUCT DATA
+        # ====================================================
 
-    except Exception:
+        result = []
+
+        for product in products:
+
+            product_id = product.get("ProductID")
+            product_name = product.get("ProductName")
+
+            # ------------------------------------------------
+            # REQUIRED FIELDS
+            # ------------------------------------------------
+
+            if not product_id or not product_name:
+
+                logger.warning(
+                    "[PRODUCT_TOOL] Invalid product skipped"
+                )
+
+                continue
+
+            # ------------------------------------------------
+            # BASIC DATA
+            # ------------------------------------------------
+
+            compact_product = {
+                "id": str(product_id),
+                "name": str(product_name)
+            }
+
+            # ------------------------------------------------
+            # SKU
+            # ------------------------------------------------
+
+            sku = product.get("SKU")
+
+            if sku:
+                compact_product["sku"] = str(sku)
+
+            # ------------------------------------------------
+            # MANUFACTURER
+            # ------------------------------------------------
+
+            manufacturer = product.get(
+                "ManufacturerName"
+            )
+
+            if manufacturer:
+
+                compact_product["manufacturer"] = str(
+                    manufacturer
+                )
+
+            # ------------------------------------------------
+            # DESCRIPTION
+            # ------------------------------------------------
+
+            description = product.get(
+                "ShortDescription"
+            )
+
+            if description:
+
+                compact_product["description"] = str(
+                    description
+                )
+
+            # ------------------------------------------------
+            # IMAGE
+            # ------------------------------------------------
+
+            image_url = product.get(
+                "ProductImage"
+            )
+
+            if image_url:
+
+                compact_product["image_url"] = str(
+                    image_url
+                )
+
+            # ------------------------------------------------
+            # ADD PRODUCT
+            # ------------------------------------------------
+
+            result.append(
+                compact_product
+            )
+
+        logger.info(
+            "[PRODUCT_TOOL] Returning products | count=%s",
+            len(result)
+        )
+
+        return result
+
+    # ========================================================
+    # REQUEST ERROR
+    # ========================================================
+
+    except requests.RequestException as e:
 
         logger.exception(
-            "Product search failed"
+            "[PRODUCT_API] Request failed | error=%s",
+            e
+        )
+
+        return []
+
+    # ========================================================
+    # GENERAL ERROR
+    # ========================================================
+
+    except Exception as e:
+
+        logger.exception(
+            "[PRODUCT_TOOL] Search failed | error=%s",
+            e
         )
 
         return []
 
 
 # ============================================================
-# LLM
+# PRODUCT AGENT RUNNER
 # ============================================================
 
-product_model = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0
-)
+def run_product_agent(query: str) -> dict:
 
+    logger.info(
+        "[PRODUCT_AGENT] Started | query=%s",
+        query
+    )
 
-# ============================================================
-# PROMPT TEMPLATE
-# ============================================================
+    try:
 
-product_prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """
-You are a Product Response Formatter.
+        # ====================================================
+        # CLEAN QUERY
+        # ====================================================
 
-You will receive products directly from a Product API.
+        query = query.strip()
 
-Your job is to format those products into the required
-structured output.
+        if not query:
 
-IMPORTANT RULES:
+            logger.warning(
+                "[PRODUCT_AGENT] Empty query received"
+            )
 
-1. Use ONLY information present in the API response.
+            return {
+                "answer": "Please enter a product search.",
+                "products": []
+            }
 
-2. NEVER invent product information.
+        # ====================================================
+        # PRODUCT TOOL EXECUTION
+        # ====================================================
 
-3. NEVER invent specifications.
-
-4. NEVER invent prices.
-
-5. NEVER invent compatibility.
-
-6. NEVER add information from your own knowledge.
-
-7. Maximum 5 products can be returned.
-
-8. For each product, include ONLY fields for which
-   information is actually available in the API response.
-
-9. Do NOT create empty fields for information that is
-   not available.
-
-10. Create one "summary" for each product.
-
-11. The summary must be based ONLY on the available
-    information for that product.
-
-12. Do not use web search.
-
-13. If no products are provided, return an empty products list.
-
-14. Return the result according to the Pydantic schema.
-
-{format_instructions}
-"""
-        ),
-
-        (
-            "human",
-            """
-User query:
-
-{query}
-
-Products returned by the Product API:
-
-{products}
-"""
+        logger.info(
+            "[PRODUCT_AGENT] Calling product_search tool"
         )
-    ]
-)
 
+        products = product_search.invoke(
+            query
+        )
 
-# ============================================================
-# CHAIN
-# ============================================================
+        logger.info(
+            "[PRODUCT_AGENT] Product tool completed | products=%s",
+            len(products)
+        )
 
-product_chain = (
-    product_prompt
-    | product_model
-    | parser
-)
+        # ====================================================
+        # NO PRODUCTS
+        # ====================================================
 
+        if not products:
 
-# ============================================================
-# PRODUCT RUNNER
-# ============================================================
+            logger.info(
+                "[PRODUCT_AGENT] No products found"
+            )
 
-def run_product_search(query: str) -> dict:
-    """
-    Receives the user's product query.
+            return ProductResponse(
+                answer=(
+                    f"I couldn't find any products matching "
+                    f"'{query}'."
+                ),
+                products=[]
+            ).model_dump()
 
-    Flow:
+        # ====================================================
+        # BUILD PRODUCT SCHEMAS
+        # ========================================================
 
-    query
-       ↓
-    product_search tool
-       ↓
-    Product API
-       ↓
-    maximum 5 products
-       ↓
-    PromptTemplate
-       ↓
-    LLM
-       ↓
-    PydanticOutputParser
-       ↓
-    dictionary
-    """
+        validated_products = []
 
-    logger.info(
-        "Running product search for query: %s",
-        query
-    )
+        for product in products:
+
+            try:
+
+                validated_product = Product(
+                    **product
+                )
+
+                validated_products.append(
+                    validated_product
+                )
+
+            except Exception as e:
+
+                logger.warning(
+                    "[PRODUCT_AGENT] Invalid product skipped | error=%s",
+                    e
+                )
+
+        # ====================================================
+        # FINAL ANSWER
+        # ====================================================
+
+        count = len(validated_products)
+
+        answer = (
+            f"Here are {count} products I found "
+            f"for '{query}'."
+        )
+
+        logger.info(
+            "[PRODUCT_AGENT] Response generated | products=%s",
+            count
+        )
+
+        # ====================================================
+        # FINAL RESPONSE
+        # ====================================================
+
+        response = ProductResponse(
+            answer=answer,
+            products=validated_products
+        )
+
+        logger.info(
+            "[PRODUCT_AGENT] Completed successfully"
+        )
+
+        return response.model_dump()
 
     # ========================================================
-    # CALL PRODUCT TOOL
+    # ERROR HANDLING
     # ========================================================
 
-    products = product_search.invoke(
-        query
-    )
+    except Exception as e:
 
-    # Safety limit
-    products = products[:5]
-
-    logger.info(
-        "Sending %s products to LLM",
-        len(products)
-    )
-
-    # ========================================================
-    # NO PRODUCTS
-    # ========================================================
-
-    if not products:
+        logger.exception(
+            "[PRODUCT_AGENT] Execution failed | error=%s",
+            e
+        )
 
         return {
-            "message": "I couldn't find any products matching your request.",
+            "answer": (
+                "Sorry, I was unable to search for products "
+                "at the moment."
+            ),
             "products": []
         }
-
-    # ========================================================
-    # RUN CHAIN
-    # ========================================================
-
-    result = product_chain.invoke(
-        {
-            "query": query,
-            "products": products,
-            "format_instructions": parser.get_format_instructions()
-        }
-    )
-
-    # ========================================================
-    # PYDANTIC → DICTIONARY
-    # ========================================================
-
-    return result.model_dump(
-        exclude_none=True
-    )
-
-
-# ============================================================
-# PRODUCT AGENT
-# ============================================================
-
-product_agent = RunnableLambda(
-    run_product_search
-)
