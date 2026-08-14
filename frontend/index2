@@ -1,0 +1,2303 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>AI Search Assistant</title>
+
+    <style>
+
+        /* =====================================================
+           RESET
+        ===================================================== */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+
+            font-family:
+                Inter,
+                ui-sans-serif,
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+
+            background: #ffffff;
+
+            color: #1f2937;
+
+            overflow: hidden;
+        }
+
+
+        /* =====================================================
+           APP
+        ===================================================== */
+
+        .app {
+
+            display: flex;
+
+            width: 100%;
+            height: 100vh;
+
+            background: #ffffff;
+        }
+
+
+        /* =====================================================
+           SIDEBAR
+        ===================================================== */
+
+        .sidebar {
+
+            width: 260px;
+
+            height: 100vh;
+
+            background:
+                linear-gradient(
+                    180deg,
+                    #111827 0%,
+                    #0f172a 100%
+                );
+
+            color: white;
+
+            display: flex;
+
+            flex-direction: column;
+
+            padding: 14px;
+
+            flex-shrink: 0;
+        }
+
+
+        /* =====================================================
+           LOGO
+        ===================================================== */
+
+        .logo {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 11px;
+
+            padding: 12px 10px 20px;
+        }
+
+        .logo-icon {
+
+            width: 36px;
+            height: 36px;
+
+            border-radius: 11px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #6366f1,
+                    #8b5cf6
+                );
+
+            box-shadow:
+                0 6px 20px
+                rgba(99, 102, 241, 0.35);
+
+            font-size: 18px;
+        }
+
+        .logo-text {
+
+            font-size: 16px;
+
+            font-weight: 700;
+
+            letter-spacing: -0.2px;
+        }
+
+
+        /* =====================================================
+           NEW CHAT
+        ===================================================== */
+
+        .new-chat {
+
+            width: 100%;
+
+            border: 1px solid
+                rgba(255,255,255,0.12);
+
+            background:
+                rgba(255,255,255,0.07);
+
+            color: white;
+
+            padding: 11px 13px;
+
+            border-radius: 10px;
+
+            cursor: pointer;
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 10px;
+
+            font-size: 14px;
+
+            transition:
+                background 0.2s,
+                transform 0.2s;
+        }
+
+        .new-chat:hover {
+
+            background:
+                rgba(255,255,255,0.13);
+
+            transform:
+                translateY(-1px);
+        }
+
+
+        /* =====================================================
+           SIDEBAR TITLE
+        ===================================================== */
+
+        .sidebar-title {
+
+            font-size: 11px;
+
+            color:
+                rgba(255,255,255,0.4);
+
+            text-transform: uppercase;
+
+            letter-spacing: 0.8px;
+
+            margin:
+
+                25px 10px 10px;
+        }
+
+
+        /* =====================================================
+           SIDEBAR INFO
+        ===================================================== */
+
+        .sidebar-info {
+
+            color:
+                rgba(255,255,255,0.6);
+
+            font-size: 13px;
+
+            line-height: 1.6;
+
+            padding: 10px;
+        }
+
+
+        /* =====================================================
+           SIDEBAR FOOTER
+        ===================================================== */
+
+        .sidebar-footer {
+
+            margin-top: auto;
+
+            padding: 10px;
+
+            border-top:
+                1px solid
+                rgba(255,255,255,0.08);
+        }
+
+        .status {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            font-size: 12px;
+
+            color:
+                rgba(255,255,255,0.6);
+        }
+
+        .status-dot {
+
+            width: 8px;
+            height: 8px;
+
+            border-radius: 50%;
+
+            background: #22c55e;
+
+            box-shadow:
+                0 0 10px
+                rgba(34,197,94,0.7);
+        }
+
+
+        /* =====================================================
+           MAIN
+        ===================================================== */
+
+        .main {
+
+            flex: 1;
+
+            height: 100vh;
+
+            display: flex;
+
+            flex-direction: column;
+
+            min-width: 0;
+
+            background: #ffffff;
+        }
+
+
+        /* =====================================================
+           HEADER
+        ===================================================== */
+
+        .topbar {
+
+            height: 58px;
+
+            border-bottom:
+                1px solid #f1f5f9;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            position: relative;
+
+            flex-shrink: 0;
+        }
+
+        .topbar-title {
+
+            font-size: 14px;
+
+            font-weight: 600;
+
+            color: #374151;
+        }
+
+
+        /* =====================================================
+           CHAT AREA
+        ===================================================== */
+
+        .chat-container {
+
+            flex: 1;
+
+            overflow-y: auto;
+
+            scroll-behavior: smooth;
+        }
+
+        .chat-container::-webkit-scrollbar {
+
+            width: 6px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+
+            background: #d1d5db;
+
+            border-radius: 10px;
+        }
+
+
+        /* =====================================================
+           MESSAGES
+        ===================================================== */
+
+        .messages {
+
+            width: 100%;
+
+            max-width: 900px;
+
+            margin: auto;
+
+            padding:
+                35px 25px 150px;
+        }
+
+
+        /* =====================================================
+           WELCOME
+        ===================================================== */
+
+        .welcome {
+
+            min-height:
+                calc(100vh - 210px);
+
+            display: flex;
+
+            flex-direction: column;
+
+            justify-content: center;
+
+            align-items: center;
+
+            text-align: center;
+
+            animation:
+                fadeUp 0.6s ease;
+        }
+
+        .welcome-icon {
+
+            width: 65px;
+            height: 65px;
+
+            border-radius: 20px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #6366f1,
+                    #8b5cf6
+                );
+
+            color: white;
+
+            font-size: 30px;
+
+            margin-bottom: 20px;
+
+            box-shadow:
+                0 15px 40px
+                rgba(99,102,241,0.25);
+        }
+
+        .welcome h1 {
+
+            font-size: 30px;
+
+            font-weight: 700;
+
+            letter-spacing: -0.8px;
+
+            color: #111827;
+
+            margin-bottom: 10px;
+        }
+
+        .welcome p {
+
+            color: #6b7280;
+
+            font-size: 15px;
+
+            max-width: 500px;
+
+            line-height: 1.6;
+        }
+
+
+        /* =====================================================
+           MESSAGE ROW
+        ===================================================== */
+
+        .message-row {
+
+            display: flex;
+
+            gap: 14px;
+
+            margin-bottom: 30px;
+
+            animation:
+                messageIn 0.35s ease;
+        }
+
+        .message-row.user {
+
+            justify-content: flex-end;
+        }
+
+
+        /* =====================================================
+           AVATAR
+        ===================================================== */
+
+        .avatar {
+
+            width: 32px;
+            height: 32px;
+
+            border-radius: 9px;
+
+            flex-shrink: 0;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            font-size: 14px;
+
+            font-weight: 600;
+        }
+
+        .assistant-avatar {
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #6366f1,
+                    #8b5cf6
+                );
+
+            color: white;
+        }
+
+        .user-avatar {
+
+            background: #e5e7eb;
+
+            color: #374151;
+        }
+
+
+        /* =====================================================
+           MESSAGE CONTENT
+        ===================================================== */
+
+        .message-content {
+
+            max-width: 760px;
+
+            min-width: 0;
+        }
+
+        .user .message-content {
+
+            max-width: 650px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #6366f1,
+                    #7c3aed
+                );
+
+            color: white;
+
+            padding:
+                11px 15px;
+
+            border-radius:
+                17px 17px 4px 17px;
+
+            box-shadow:
+                0 5px 18px
+                rgba(99,102,241,0.18);
+        }
+
+        .assistant .message-content {
+
+            color: #374151;
+
+            line-height: 1.7;
+
+            font-size: 15px;
+        }
+
+
+        /* =====================================================
+           ANSWER TEXT
+        ===================================================== */
+
+        .answer-text {
+
+            white-space: pre-wrap;
+
+            word-break: break-word;
+        }
+
+
+        /* =====================================================
+           TYPING
+        ===================================================== */
+
+        .typing {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 5px;
+
+            padding: 8px 0;
+        }
+
+        .typing span {
+
+            width: 7px;
+            height: 7px;
+
+            border-radius: 50%;
+
+            background: #9ca3af;
+
+            animation:
+                typing 1.2s infinite;
+        }
+
+        .typing span:nth-child(2) {
+
+            animation-delay:
+                0.15s;
+        }
+
+        .typing span:nth-child(3) {
+
+            animation-delay:
+                0.3s;
+        }
+
+
+        /* =====================================================
+           PRODUCTS
+        ===================================================== */
+
+        .products-wrapper {
+
+            margin-top: 18px;
+        }
+
+        .products-heading {
+
+            font-size: 14px;
+
+            font-weight: 650;
+
+            color: #374151;
+
+            margin-bottom: 12px;
+        }
+
+        .products-grid {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(
+                    auto-fit,
+                    minmax(220px, 1fr)
+                );
+
+            gap: 12px;
+        }
+
+
+        /* =====================================================
+           PRODUCT CARD
+        ===================================================== */
+
+        .product-card {
+
+            background: #ffffff;
+
+            border:
+                1px solid #e5e7eb;
+
+            border-radius: 14px;
+
+            overflow: hidden;
+
+            transition:
+                transform 0.25s ease,
+                box-shadow 0.25s ease,
+                border-color 0.25s ease;
+
+            animation:
+                cardIn 0.45s ease both;
+        }
+
+        .product-card:hover {
+
+            transform:
+                translateY(-4px);
+
+            border-color:
+                #c7d2fe;
+
+            box-shadow:
+                0 12px 30px
+                rgba(15,23,42,0.09);
+        }
+
+
+        /* =====================================================
+           PRODUCT IMAGE
+        ===================================================== */
+
+        .product-image-container {
+
+            height: 170px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #f8fafc,
+                    #eef2ff
+                );
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            position: relative;
+
+            overflow: hidden;
+        }
+
+        .product-image {
+
+            width: 100%;
+
+            height: 100%;
+
+            object-fit: contain;
+
+            padding: 12px;
+
+            opacity: 0;
+
+            transition:
+                opacity 0.35s ease,
+                transform 0.35s ease;
+        }
+
+        .product-image.loaded {
+
+            opacity: 1;
+        }
+
+        .product-card:hover
+        .product-image.loaded {
+
+            transform:
+                scale(1.05);
+        }
+
+
+        /* =====================================================
+           IMAGE LOADER
+        ===================================================== */
+
+        .image-loader {
+
+            width: 24px;
+            height: 24px;
+
+            border:
+                2px solid #dbeafe;
+
+            border-top-color:
+                #6366f1;
+
+            border-radius: 50%;
+
+            animation:
+                spin 0.7s linear infinite;
+
+            position: absolute;
+        }
+
+
+        /* =====================================================
+           PRODUCT INFO
+        ===================================================== */
+
+        .product-info {
+
+            padding: 13px;
+        }
+
+        .product-name {
+
+            font-size: 14px;
+
+            font-weight: 650;
+
+            color: #111827;
+
+            line-height: 1.4;
+
+            margin-bottom: 7px;
+        }
+
+        .product-meta {
+
+            font-size: 12px;
+
+            color: #6b7280;
+
+            margin-bottom: 3px;
+        }
+
+        .product-description {
+
+            font-size: 12px;
+
+            color: #6b7280;
+
+            line-height: 1.5;
+
+            margin-top: 8px;
+
+            display:
+                -webkit-box;
+
+            -webkit-line-clamp: 3;
+
+            -webkit-box-orient: vertical;
+
+            overflow: hidden;
+        }
+
+
+        /* =====================================================
+           INPUT AREA
+        ===================================================== */
+
+        .input-area {
+
+            position: fixed;
+
+            bottom: 0;
+
+            left: 260px;
+
+            right: 0;
+
+            background:
+                linear-gradient(
+                    to top,
+                    #ffffff 70%,
+                    rgba(255,255,255,0)
+                );
+
+            padding:
+                20px 20px 25px;
+
+            display: flex;
+
+            justify-content: center;
+
+            z-index: 20;
+        }
+
+        .input-wrapper {
+
+            width: 100%;
+
+            max-width: 850px;
+
+            background: white;
+
+            border:
+                1px solid #d1d5db;
+
+            border-radius: 17px;
+
+            display: flex;
+
+            align-items: flex-end;
+
+            padding: 8px 9px 8px 15px;
+
+            box-shadow:
+                0 8px 35px
+                rgba(15,23,42,0.10);
+
+            transition:
+                border-color 0.2s,
+                box-shadow 0.2s;
+        }
+
+        .input-wrapper:focus-within {
+
+            border-color:
+                #818cf8;
+
+            box-shadow:
+                0 8px 35px
+                rgba(99,102,241,0.14);
+        }
+
+        #query {
+
+            flex: 1;
+
+            border: none;
+
+            outline: none;
+
+            resize: none;
+
+            max-height: 130px;
+
+            min-height: 42px;
+
+            padding:
+                10px 8px;
+
+            font-family: inherit;
+
+            font-size: 15px;
+
+            line-height: 1.5;
+
+            color: #111827;
+
+            background: transparent;
+        }
+
+        #query::placeholder {
+
+            color: #9ca3af;
+        }
+
+
+        /* =====================================================
+           SEND BUTTON
+        ===================================================== */
+
+        .send-button {
+
+            width: 40px;
+            height: 40px;
+
+            border: none;
+
+            border-radius: 12px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #6366f1,
+                    #7c3aed
+                );
+
+            color: white;
+
+            cursor: pointer;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            transition:
+                transform 0.2s,
+                opacity 0.2s;
+        }
+
+        .send-button:hover {
+
+            transform:
+                scale(1.05);
+        }
+
+        .send-button:disabled {
+
+            opacity: 0.5;
+
+            cursor:
+                not-allowed;
+
+            transform:
+                none;
+        }
+
+        .send-button svg {
+
+            width: 18px;
+            height: 18px;
+        }
+
+
+        /* =====================================================
+           ANIMATIONS
+        ===================================================== */
+
+        @keyframes spin {
+
+            to {
+                transform:
+                    rotate(360deg);
+            }
+        }
+
+        @keyframes typing {
+
+            0%,
+            60%,
+            100% {
+
+                transform:
+                    translateY(0);
+
+                opacity:
+                    0.4;
+            }
+
+            30% {
+
+                transform:
+                    translateY(-5px);
+
+                opacity:
+                    1;
+            }
+        }
+
+        @keyframes fadeUp {
+
+            from {
+
+                opacity: 0;
+
+                transform:
+                    translateY(15px);
+            }
+
+            to {
+
+                opacity: 1;
+
+                transform:
+                    translateY(0);
+            }
+        }
+
+        @keyframes messageIn {
+
+            from {
+
+                opacity: 0;
+
+                transform:
+                    translateY(8px);
+            }
+
+            to {
+
+                opacity: 1;
+
+                transform:
+                    translateY(0);
+            }
+        }
+
+        @keyframes cardIn {
+
+            from {
+
+                opacity: 0;
+
+                transform:
+                    translateY(15px)
+                    scale(0.98);
+            }
+
+            to {
+
+                opacity: 1;
+
+                transform:
+                    translateY(0)
+                    scale(1);
+            }
+        }
+
+
+        /* =====================================================
+           MOBILE
+        ===================================================== */
+
+        @media (max-width: 700px) {
+
+            .sidebar {
+
+                display: none;
+            }
+
+            .input-area {
+
+                left: 0;
+
+                padding:
+                    12px 10px 18px;
+            }
+
+            .messages {
+
+                padding:
+                    25px 15px 140px;
+            }
+
+            .products-grid {
+
+                grid-template-columns:
+                    1fr;
+            }
+
+            .welcome h1 {
+
+                font-size: 25px;
+            }
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="app">
+
+
+    <!-- =====================================================
+         SIDEBAR
+    ====================================================== -->
+
+    <aside class="sidebar">
+
+        <div class="logo">
+
+            <div class="logo-icon">
+                ✦
+            </div>
+
+            <div class="logo-text">
+                AI Search Assistant
+            </div>
+
+        </div>
+
+
+        <button
+            class="new-chat"
+            id="newChat"
+        >
+
+            <span>
+                ＋
+            </span>
+
+            New chat
+
+        </button>
+
+
+        <div class="sidebar-title">
+            About
+        </div>
+
+        <div class="sidebar-info">
+
+            Search products from your
+            Product API or ask general
+            questions using web search.
+
+        </div>
+
+
+        <div class="sidebar-footer">
+
+            <div class="status">
+
+                <span class="status-dot"></span>
+
+                AI services online
+
+            </div>
+
+        </div>
+
+    </aside>
+
+
+    <!-- =====================================================
+         MAIN
+    ====================================================== -->
+
+    <main class="main">
+
+
+        <!-- =================================================
+             TOP BAR
+        ================================================== -->
+
+        <header class="topbar">
+
+            <div class="topbar-title">
+                AI Search Assistant
+            </div>
+
+        </header>
+
+
+        <!-- =================================================
+             CHAT
+        ================================================== -->
+
+        <div
+            class="chat-container"
+            id="chatContainer"
+        >
+
+            <div
+                class="messages"
+                id="messages"
+            >
+
+
+                <!-- =========================================
+                     WELCOME
+                ========================================== -->
+
+                <div
+                    class="welcome"
+                    id="welcome"
+                >
+
+                    <div class="welcome-icon">
+                        ✦
+                    </div>
+
+                    <h1>
+                        How can I help you?
+                    </h1>
+
+                    <p>
+                        Search your product catalog,
+                        find security products, or ask
+                        questions that require web search.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             INPUT
+        ================================================== -->
+
+        <div class="input-area">
+
+            <form
+                class="input-wrapper"
+                id="chatForm"
+            >
+
+                <textarea
+                    id="query"
+                    rows="1"
+                    placeholder="Ask anything..."
+                    autocomplete="off"
+                ></textarea>
+
+
+                <button
+                    class="send-button"
+                    id="sendButton"
+                    type="submit"
+                    title="Send"
+                >
+
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+
+                        <line
+                            x1="22"
+                            y1="2"
+                            x2="11"
+                            y2="13"
+                        ></line>
+
+                        <polygon
+                            points="22 2 15 22 11 13 2 9 22 2"
+                        ></polygon>
+
+                    </svg>
+
+                </button>
+
+            </form>
+
+        </div>
+
+    </main>
+
+</div>
+
+
+<script>
+
+
+    // ========================================================
+    // CONFIG
+    // ========================================================
+
+    const BACKEND_URL =
+        "http://127.0.0.1:8000/chat";
+
+    // One session ID for the whole conversation.
+    // It changes only when "New chat" is clicked.
+    let sessionId = crypto.randomUUID();
+
+
+    // ========================================================
+    // ELEMENTS
+    // ========================================================
+
+    const chatForm =
+        document.getElementById("chatForm");
+
+    const queryInput =
+        document.getElementById("query");
+
+    const sendButton =
+        document.getElementById("sendButton");
+
+    const messages =
+        document.getElementById("messages");
+
+    const chatContainer =
+        document.getElementById("chatContainer");
+
+    const newChat =
+        document.getElementById("newChat");
+
+    const welcome =
+        document.getElementById("welcome");
+
+
+    // ========================================================
+    // AUTO RESIZE TEXTAREA
+    // ========================================================
+
+    queryInput.addEventListener(
+        "input",
+        function() {
+
+            this.style.height = "auto";
+
+            this.style.height =
+                Math.min(
+                    this.scrollHeight,
+                    130
+                ) + "px";
+
+        }
+    );
+
+
+    // ========================================================
+    // ENTER TO SEND
+    // SHIFT + ENTER = NEW LINE
+    // ========================================================
+
+    queryInput.addEventListener(
+        "keydown",
+        function(event) {
+
+            if (
+                event.key === "Enter" &&
+                !event.shiftKey
+            ) {
+
+                event.preventDefault();
+
+                chatForm.requestSubmit();
+
+            }
+
+        }
+    );
+
+
+    // ========================================================
+    // NEW CHAT
+    // ========================================================
+
+    newChat.addEventListener(
+        "click",
+        function() {
+
+            // Start a completely new conversation.
+            sessionId = crypto.randomUUID();
+
+            console.log("[CHAT] New session:", sessionId);
+
+            messages.innerHTML = "";
+
+            messages.appendChild(
+                createWelcome()
+            );
+
+            queryInput.value = "";
+
+            queryInput.style.height =
+                "auto";
+
+            queryInput.focus();
+
+        }
+    );
+
+
+    // ========================================================
+    // CREATE WELCOME
+    // ========================================================
+
+    function createWelcome() {
+
+        const div =
+            document.createElement("div");
+
+        div.className =
+            "welcome";
+
+        div.innerHTML = `
+
+            <div class="welcome-icon">
+                ✦
+            </div>
+
+            <h1>
+                How can I help you?
+            </h1>
+
+            <p>
+                Search your product catalog,
+                find security products, or ask
+                questions that require web search.
+            </p>
+
+        `;
+
+        return div;
+    }
+
+
+    // ========================================================
+    // CHAT SUBMIT
+    // ========================================================
+
+    chatForm.addEventListener(
+        "submit",
+        async function(event) {
+
+            event.preventDefault();
+
+            const query =
+                queryInput.value.trim();
+
+            if (!query) {
+                return;
+            }
+
+
+            // Remove welcome
+
+            if (welcome) {
+
+                welcome.remove();
+
+            }
+
+
+            // User message
+
+            addUserMessage(
+                query
+            );
+
+
+            // Clear input
+
+            queryInput.value = "";
+
+            queryInput.style.height =
+                "auto";
+
+
+            // Disable
+
+            sendButton.disabled =
+                true;
+
+
+            // Typing
+
+            const typingMessage =
+                addTypingMessage();
+
+
+            try {
+
+
+                // ==========================================
+                // API REQUEST
+                // ==========================================
+
+                console.log(
+                    "[CHAT] Session ID:",
+                    sessionId
+                );
+
+                console.log(
+                    "[CHAT] Sending query:",
+                    query
+                );
+
+                const response =
+                    await fetch(
+                        BACKEND_URL,
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body: JSON.stringify({
+                                query: query,
+                                session_id: sessionId
+                            })
+                        }
+                    );
+
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        `Server error: ${response.status}`
+                    );
+
+                }
+
+
+                const data =
+                    await response.json();
+
+
+                // Remove typing
+
+                typingMessage.remove();
+
+
+                // ==========================================
+                // ASSISTANT RESPONSE
+                // ==========================================
+
+                addAssistantMessage(
+                    data
+                );
+
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    error
+                );
+
+
+                typingMessage.remove();
+
+
+                addAssistantError(
+                    error.message
+                );
+
+            }
+
+            finally {
+
+                sendButton.disabled =
+                    false;
+
+                queryInput.focus();
+
+            }
+
+        }
+    );
+
+
+    // ========================================================
+    // USER MESSAGE
+    // ========================================================
+
+    function addUserMessage(
+        text
+    ) {
+
+        const row =
+            document.createElement("div");
+
+        row.className =
+            "message-row user";
+
+
+        const content =
+            document.createElement("div");
+
+        content.className =
+            "message-content";
+
+        content.innerText =
+            text;
+
+
+        const avatar =
+            document.createElement("div");
+
+        avatar.className =
+            "avatar user-avatar";
+
+        avatar.innerText =
+            "U";
+
+
+        row.appendChild(
+            content
+        );
+
+        row.appendChild(
+            avatar
+        );
+
+
+        messages.appendChild(
+            row
+        );
+
+
+        scrollToBottom();
+
+    }
+
+
+    // ========================================================
+    // TYPING MESSAGE
+    // ========================================================
+
+    function addTypingMessage() {
+
+        const row =
+            document.createElement("div");
+
+        row.className =
+            "message-row assistant";
+
+
+        const avatar =
+            document.createElement("div");
+
+        avatar.className =
+            "avatar assistant-avatar";
+
+        avatar.innerText =
+            "✦";
+
+
+        const content =
+            document.createElement("div");
+
+        content.className =
+            "message-content";
+
+
+        content.innerHTML = `
+
+            <div class="typing">
+
+                <span></span>
+                <span></span>
+                <span></span>
+
+            </div>
+
+        `;
+
+
+        row.appendChild(
+            avatar
+        );
+
+        row.appendChild(
+            content
+        );
+
+
+        messages.appendChild(
+            row
+        );
+
+
+        scrollToBottom();
+
+
+        return row;
+
+    }
+
+
+    // ========================================================
+    // ASSISTANT MESSAGE
+    // ========================================================
+
+    function addAssistantMessage(
+        data
+    ) {
+
+        const row =
+            document.createElement("div");
+
+        row.className =
+            "message-row assistant";
+
+
+        const avatar =
+            document.createElement("div");
+
+        avatar.className =
+            "avatar assistant-avatar";
+
+        avatar.innerText =
+            "✦";
+
+
+        const content =
+            document.createElement("div");
+
+        content.className =
+            "message-content";
+
+
+        // ==============================================
+        // ANSWER
+        // ==============================================
+
+        if (data.answer) {
+
+            const answer =
+                document.createElement("div");
+
+            answer.className =
+                "answer-text";
+
+            answer.innerText =
+                data.answer;
+
+            content.appendChild(
+                answer
+            );
+
+        }
+
+
+        // ==============================================
+        // PRODUCTS
+        // ==============================================
+
+        if (
+            data.products &&
+            data.products.length > 0
+        ) {
+
+            const productsWrapper =
+                document.createElement(
+                    "div"
+                );
+
+            productsWrapper.className =
+                "products-wrapper";
+
+
+            const heading =
+                document.createElement(
+                    "div"
+                );
+
+            heading.className =
+                "products-heading";
+
+            heading.innerText =
+                `Products (${data.products.length})`;
+
+
+            const grid =
+                document.createElement(
+                    "div"
+                );
+
+            grid.className =
+                "products-grid";
+
+
+            data.products.forEach(
+                function(product, index) {
+
+                    grid.appendChild(
+                        createProductCard(
+                            product,
+                            index
+                        )
+                    );
+
+                }
+            );
+
+
+            productsWrapper.appendChild(
+                heading
+            );
+
+            productsWrapper.appendChild(
+                grid
+            );
+
+
+            content.appendChild(
+                productsWrapper
+            );
+
+        }
+
+
+        row.appendChild(
+            avatar
+        );
+
+        row.appendChild(
+            content
+        );
+
+
+        messages.appendChild(
+            row
+        );
+
+
+        scrollToBottom();
+
+    }
+
+
+    // ========================================================
+    // PRODUCT CARD
+    // ========================================================
+
+    function createProductCard(
+        product,
+        index
+    ) {
+
+        const card =
+            document.createElement("div");
+
+        card.className =
+            "product-card";
+
+        card.style.animationDelay =
+            `${index * 0.08}s`;
+
+
+        // ==============================================
+        // IMAGE CONTAINER
+        // ==============================================
+
+        const imageContainer =
+            document.createElement(
+                "div"
+            );
+
+        imageContainer.className =
+            "product-image-container";
+
+
+        // ==============================================
+        // IMAGE LOADER
+        // ==============================================
+
+        const loader =
+            document.createElement(
+                "div"
+            );
+
+        loader.className =
+            "image-loader";
+
+
+        // ==============================================
+        // IMAGE
+        // ==============================================
+
+        const image =
+            document.createElement(
+                "img"
+            );
+
+        image.className =
+            "product-image";
+
+        image.alt =
+            product.name ||
+            "Product";
+
+
+        image.loading =
+            index < 2
+                ? "eager"
+                : "lazy";
+
+
+        image.decoding =
+            "async";
+
+
+        // ==============================================
+        // IMAGE URL
+        // ==============================================
+
+        let imageUrl =
+            product.image_url;
+
+
+        /*
+         * Supports both:
+         *
+         * https://example.com/a.png
+         *
+         * and:
+         *
+         * [image](https://example.com/a.png)
+         */
+
+        if (
+            imageUrl &&
+            imageUrl.startsWith("[")
+        ) {
+
+            const match =
+                imageUrl.match(
+                    /\((.*?)\)/
+                );
+
+            if (match) {
+
+                imageUrl =
+                    match[1];
+
+            }
+
+        }
+
+
+        // ==============================================
+        // IMAGE LOAD
+        // ==============================================
+
+        image.onload =
+            function() {
+
+                image.classList.add(
+                    "loaded"
+                );
+
+                loader.style.display =
+                    "none";
+
+            };
+
+
+        // ==============================================
+        // IMAGE ERROR
+        // ==============================================
+
+        image.onerror =
+            function() {
+
+                loader.style.display =
+                    "none";
+
+                image.style.display =
+                    "none";
+
+                imageContainer.innerHTML += `
+
+                    <span
+                        style="
+                            color:#9ca3af;
+                            font-size:12px;
+                        "
+                    >
+                        Image unavailable
+                    </span>
+
+                `;
+
+            };
+
+
+        if (imageUrl) {
+
+            image.src =
+                imageUrl;
+
+        }
+        else {
+
+            loader.style.display =
+                "none";
+
+            imageContainer.innerHTML += `
+
+                <span
+                    style="
+                        color:#9ca3af;
+                        font-size:12px;
+                    "
+                >
+                    No image
+                </span>
+
+            `;
+
+        }
+
+
+        imageContainer.appendChild(
+            loader
+        );
+
+        imageContainer.appendChild(
+            image
+        );
+
+
+        // ==============================================
+        // PRODUCT INFO
+        // ==============================================
+
+        const info =
+            document.createElement(
+                "div"
+            );
+
+        info.className =
+            "product-info";
+
+
+        // NAME
+
+        const name =
+            document.createElement(
+                "div"
+            );
+
+        name.className =
+            "product-name";
+
+        name.innerText =
+            product.name ||
+            "Unknown product";
+
+
+        info.appendChild(
+            name
+        );
+
+
+        // MANUFACTURER
+
+        if (
+            product.manufacturer
+        ) {
+
+            const manufacturer =
+                document.createElement(
+                    "div"
+                );
+
+            manufacturer.className =
+                "product-meta";
+
+            manufacturer.innerHTML =
+                `<strong>Manufacturer:</strong>
+                 ${escapeHtml(
+                     product.manufacturer
+                 )}`;
+
+            info.appendChild(
+                manufacturer
+            );
+
+        }
+
+
+        // SKU
+
+        if (product.sku) {
+
+            const sku =
+                document.createElement(
+                    "div"
+                );
+
+            sku.className =
+                "product-meta";
+
+            sku.innerHTML =
+                `<strong>SKU:</strong>
+                 ${escapeHtml(
+                     product.sku
+                 )}`;
+
+            info.appendChild(
+                sku
+            );
+
+        }
+
+
+        // DESCRIPTION
+
+        if (
+            product.description
+        ) {
+
+            const description =
+                document.createElement(
+                    "div"
+                );
+
+            description.className =
+                "product-description";
+
+            description.innerText =
+                product.description;
+
+            info.appendChild(
+                description
+            );
+
+        }
+
+
+        // ==============================================
+        // BUILD CARD
+        // ==============================================
+
+        card.appendChild(
+            imageContainer
+        );
+
+        card.appendChild(
+            info
+        );
+
+
+        return card;
+
+    }
+
+
+    // ========================================================
+    // ERROR MESSAGE
+    // ========================================================
+
+    function addAssistantError(
+        message
+    ) {
+
+        const row =
+            document.createElement("div");
+
+        row.className =
+            "message-row assistant";
+
+
+        const avatar =
+            document.createElement("div");
+
+        avatar.className =
+            "avatar assistant-avatar";
+
+        avatar.innerText =
+            "✦";
+
+
+        const content =
+            document.createElement("div");
+
+        content.className =
+            "message-content";
+
+
+        content.innerHTML = `
+
+            <div
+                style="
+                    color:#dc2626;
+                    background:#fef2f2;
+                    padding:12px 14px;
+                    border-radius:12px;
+                    border:1px solid #fecaca;
+                "
+            >
+                Sorry, something went wrong.
+                <br>
+                <small>
+                    ${escapeHtml(message)}
+                </small>
+            </div>
+
+        `;
+
+
+        row.appendChild(
+            avatar
+        );
+
+        row.appendChild(
+            content
+        );
+
+
+        messages.appendChild(
+            row
+        );
+
+
+        scrollToBottom();
+
+    }
+
+
+    // ========================================================
+    // SCROLL
+    // ========================================================
+
+    function scrollToBottom() {
+
+        setTimeout(
+            function() {
+
+                chatContainer.scrollTo({
+
+                    top:
+                        chatContainer.scrollHeight,
+
+                    behavior:
+                        "smooth"
+
+                });
+
+            },
+            50
+        );
+
+    }
+
+
+    // ========================================================
+    // ESCAPE HTML
+    // ========================================================
+
+    function escapeHtml(
+        value
+    ) {
+
+        const div =
+            document.createElement(
+                "div"
+            );
+
+        div.innerText =
+            value;
+
+        return div.innerHTML;
+
+    }
+
+
+</script>
+
+
+</body>
+
+</html>

@@ -1,13 +1,9 @@
 import os
 import requests
-
-from typing import Any, Optional
-
+from typing import Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel
-
 from langchain.tools import tool
-
 from utils.logger import get_logger
 
 
@@ -18,7 +14,6 @@ from utils.logger import get_logger
 load_dotenv(override=True)
 
 logger = get_logger(__name__)
-
 PRODUCT_API = os.getenv("PRODUCT_API")
 
 
@@ -44,45 +39,83 @@ class ProductResponse(BaseModel):
 # PRODUCT EXTRACTION
 # ============================================================
 
-def extract_products(obj: Any) -> list[dict]:
+def extract_products(data: dict, limit: int = 20) -> list[dict]:
     """
-    Recursively find product objects inside the Product API
-    response.
+    Extract up to `limit` valid products from the Product API response.
     """
 
     products = []
 
-    # --------------------------------------------------------
-    # DICTIONARY
-    # --------------------------------------------------------
+    for category_group in data.get("Products", []):
 
-    if isinstance(obj, dict):
+        if not isinstance(category_group, dict):
+            continue
 
-        if (
-            "ProductID" in obj
-            and "ProductName" in obj
-        ):
-            products.append(obj)
+        for category_products in category_group.values():
 
-        for value in obj.values():
+            if not isinstance(category_products, list):
+                continue
 
-            products.extend(
-                extract_products(value)
-            )
+            for product in category_products:
 
-    # --------------------------------------------------------
-    # LIST
-    # --------------------------------------------------------
+                if not isinstance(product, dict):
+                    continue
 
-    elif isinstance(obj, list):
+                if not product.get("ProductID"):
+                    continue
 
-        for item in obj:
+                if not product.get("ProductName"):
+                    continue
 
-            products.extend(
-                extract_products(item)
-            )
+                products.append(product)
+
+                # Stop once we have 20 products
+                if len(products) >= limit:
+                    return products
 
     return products
+
+
+# ============================================================
+# PRODUCT NORMALIZATION
+# ============================================================
+
+def normalize_product(product: dict) -> dict:
+    """
+    Convert API product format into our application's Product format.
+    """
+
+    compact_product = {
+        "id": str(product["ProductID"]),
+        "name": str(product["ProductName"]),
+    }
+
+    # SKU
+    if product.get("SKU"):
+        compact_product["sku"] = str(product["SKU"])
+
+    # MANUFACTURER
+    if product.get("ManufacturerName"):
+        compact_product["manufacturer"] = str(
+            product["ManufacturerName"]
+        )
+
+    # DESCRIPTION
+    if product.get("ShortDescription"):
+        compact_product["description"] = str(
+            product["ShortDescription"]
+        )
+
+    # IMAGE
+    if product.get("ProductImage"):
+        # Take only the first image if multiple URLs exist
+        compact_product["image_url"] = (
+            str(product["ProductImage"])
+            .split("|")[0]
+            .strip()
+        )
+
+    return compact_product
 
 
 # ============================================================
@@ -92,10 +125,9 @@ def extract_products(obj: Any) -> list[dict]:
 @tool
 def product_search(query: str) -> list[dict]:
     """
-    Search the Product API and return the top 5 products.
+    Search the Product API and return up to 20 products.
 
     Use this tool for:
-
     - Product searches
     - Manufacturers
     - Categories
@@ -110,9 +142,9 @@ def product_search(query: str) -> list[dict]:
         query
     )
 
-    # ========================================================
+    # --------------------------------------------------------
     # API CONFIGURATION
-    # ========================================================
+    # --------------------------------------------------------
 
     if not PRODUCT_API:
 
@@ -124,13 +156,11 @@ def product_search(query: str) -> list[dict]:
 
     try:
 
-        # ====================================================
+        # ----------------------------------------------------
         # API REQUEST
-        # ====================================================
+        # ----------------------------------------------------
 
-        logger.info(
-            "[PRODUCT_API] Request started"
-        )
+        logger.info("[PRODUCT_API] Request started")
 
         response = requests.post(
             f"{PRODUCT_API}/search",
@@ -139,9 +169,9 @@ def product_search(query: str) -> list[dict]:
                 "category_name": "",
                 "subcategory_name": "",
                 "manufacturer_name": "",
-                "userId": 0
+                "userId": 0,
             },
-            timeout=30
+            timeout=30,
         )
 
         response.raise_for_status()
@@ -151,124 +181,37 @@ def product_search(query: str) -> list[dict]:
             response.status_code
         )
 
-        # ====================================================
+        # ----------------------------------------------------
         # PARSE JSON
-        # ====================================================
+        # ----------------------------------------------------
 
         data = response.json()
 
-        # ====================================================
+        # ----------------------------------------------------
         # EXTRACT PRODUCTS
-        # ====================================================
+        # ----------------------------------------------------
 
-        products = extract_products(data)
+        products = extract_products(
+            data,
+            limit=20
+        )
 
         logger.info(
-            "[PRODUCT_TOOL] Raw products extracted | count=%s",
+            "[PRODUCT_TOOL] Products extracted | count=%s",
             len(products)
         )
 
-        # ====================================================
-        # TOP 5
-        # ====================================================
-
-        products = products[:5]
-
-        logger.info(
-            "[PRODUCT_TOOL] Top-K applied | k=5 | count=%s",
-            len(products)
-        )
-
-        # ====================================================
-        # COMPACT PRODUCT DATA
-        # ====================================================
+        # ----------------------------------------------------
+        # NORMALIZE PRODUCTS
+        # ----------------------------------------------------
 
         result = []
 
         for product in products:
 
-            product_id = product.get("ProductID")
-            product_name = product.get("ProductName")
+            compact_product = normalize_product(product)
 
-            # ------------------------------------------------
-            # REQUIRED FIELDS
-            # ------------------------------------------------
-
-            if not product_id or not product_name:
-
-                logger.warning(
-                    "[PRODUCT_TOOL] Invalid product skipped"
-                )
-
-                continue
-
-            # ------------------------------------------------
-            # BASIC DATA
-            # ------------------------------------------------
-
-            compact_product = {
-                "id": str(product_id),
-                "name": str(product_name)
-            }
-
-            # ------------------------------------------------
-            # SKU
-            # ------------------------------------------------
-
-            sku = product.get("SKU")
-
-            if sku:
-                compact_product["sku"] = str(sku)
-
-            # ------------------------------------------------
-            # MANUFACTURER
-            # ------------------------------------------------
-
-            manufacturer = product.get(
-                "ManufacturerName"
-            )
-
-            if manufacturer:
-
-                compact_product["manufacturer"] = str(
-                    manufacturer
-                )
-
-            # ------------------------------------------------
-            # DESCRIPTION
-            # ------------------------------------------------
-
-            description = product.get(
-                "ShortDescription"
-            )
-
-            if description:
-
-                compact_product["description"] = str(
-                    description
-                )
-
-            # ------------------------------------------------
-            # IMAGE
-            # ------------------------------------------------
-
-            image_url = product.get(
-                "ProductImage"
-            )
-
-            if image_url:
-
-                compact_product["image_url"] = str(
-                    image_url
-                )
-
-            # ------------------------------------------------
-            # ADD PRODUCT
-            # ------------------------------------------------
-
-            result.append(
-                compact_product
-            )
+            result.append(compact_product)
 
         logger.info(
             "[PRODUCT_TOOL] Returning products | count=%s",
@@ -277,9 +220,9 @@ def product_search(query: str) -> list[dict]:
 
         return result
 
-    # ========================================================
+    # --------------------------------------------------------
     # REQUEST ERROR
-    # ========================================================
+    # --------------------------------------------------------
 
     except requests.RequestException as e:
 
@@ -290,9 +233,9 @@ def product_search(query: str) -> list[dict]:
 
         return []
 
-    # ========================================================
+    # --------------------------------------------------------
     # GENERAL ERROR
-    # ========================================================
+    # --------------------------------------------------------
 
     except Exception as e:
 
@@ -317,9 +260,9 @@ def run_product_agent(query: str) -> dict:
 
     try:
 
-        # ====================================================
+        # ----------------------------------------------------
         # CLEAN QUERY
-        # ====================================================
+        # ----------------------------------------------------
 
         query = query.strip()
 
@@ -334,26 +277,24 @@ def run_product_agent(query: str) -> dict:
                 "products": []
             }
 
-        # ====================================================
+        # ----------------------------------------------------
         # PRODUCT TOOL EXECUTION
-        # ====================================================
+        # ----------------------------------------------------
 
         logger.info(
             "[PRODUCT_AGENT] Calling product_search tool"
         )
 
-        products = product_search.invoke(
-            query
-        )
+        products = product_search.invoke(query)
 
         logger.info(
             "[PRODUCT_AGENT] Product tool completed | products=%s",
             len(products)
         )
 
-        # ====================================================
+        # ----------------------------------------------------
         # NO PRODUCTS
-        # ====================================================
+        # ----------------------------------------------------
 
         if not products:
 
@@ -362,16 +303,13 @@ def run_product_agent(query: str) -> dict:
             )
 
             return ProductResponse(
-                answer=(
-                    f"I couldn't find any products matching "
-                    f"'{query}'."
-                ),
+                answer=f"I couldn't find any products matching '{query}'.",
                 products=[]
             ).model_dump()
 
-        # ====================================================
-        # BUILD PRODUCT SCHEMAS
-        # ========================================================
+        # ----------------------------------------------------
+        # PYDANTIC VALIDATION
+        # ----------------------------------------------------
 
         validated_products = []
 
@@ -393,10 +331,11 @@ def run_product_agent(query: str) -> dict:
                     "[PRODUCT_AGENT] Invalid product skipped | error=%s",
                     e
                 )
-
-        # ====================================================
+ 
+        # ----------------------------------------------------
         # FINAL ANSWER
-        # ====================================================
+        # ----------------------------------------------------
+        validated_products = validated_products[:5]
 
         count = len(validated_products)
 
@@ -410,9 +349,9 @@ def run_product_agent(query: str) -> dict:
             count
         )
 
-        # ====================================================
+        # ----------------------------------------------------
         # FINAL RESPONSE
-        # ====================================================
+        # ----------------------------------------------------
 
         response = ProductResponse(
             answer=answer,
@@ -425,9 +364,9 @@ def run_product_agent(query: str) -> dict:
 
         return response.model_dump()
 
-    # ========================================================
+    # --------------------------------------------------------
     # ERROR HANDLING
-    # ========================================================
+    # --------------------------------------------------------
 
     except Exception as e:
 
